@@ -26,12 +26,24 @@ if st.button("Process PDF", type="primary", use_container_width=True):
     pdf_bytes = uploaded.read()
 
     # ── Extract + classify ────────────────────────────────────────────────────
-    with st.spinner("Reading and classifying pages… (scanned PDFs may take a moment for OCR)"):
-        pages_info = extract_pages_info(pdf_bytes)
+    try:
+        with st.spinner("Reading and classifying pages… (scanned PDFs may take a moment for OCR)"):
+            pages_info = extract_pages_info(pdf_bytes)
+    except Exception as e:
+        import traceback
+        st.error(f"Error during extraction: {e}")
+        st.code(traceback.format_exc())
+        st.stop()
 
     # ── Group ─────────────────────────────────────────────────────────────────
-    with st.spinner("Grouping documents…"):
-        doc_groups, loan_groups = group_pages(pages_info)
+    try:
+        with st.spinner("Grouping documents…"):
+            doc_groups, loan_groups = group_pages(pages_info)
+    except Exception as e:
+        import traceback
+        st.error(f"Error during grouping: {e}")
+        st.code(traceback.format_exc())
+        st.stop()
 
     # ── Summary metrics ───────────────────────────────────────────────────────
     st.divider()
