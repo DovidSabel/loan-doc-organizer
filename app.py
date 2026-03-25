@@ -26,45 +26,8 @@ if st.button("Process PDF", type="primary", use_container_width=True):
     pdf_bytes = uploaded.read()
 
     # ── Extract + classify ────────────────────────────────────────────────────
-    with st.spinner("Reading and classifying pages…"):
-        progress = st.progress(0)
-
-        # We call extract_pages_info but wrap it so we can show per-page progress.
-        # For large files this is important UX feedback.
-        import pdfplumber
-        from parser_utils import (
-            classify_page, extract_doc_number,
-            extract_assignment_fields, extract_schedule_a_fields,
-            extract_promissory_note_fields,
-        )
-
-        pages_info = []
-        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            total = len(pdf.pages)
-            for i, page in enumerate(pdf.pages):
-                text  = page.extract_text() or ''
-                ptype = classify_page(text)
-                dnum  = extract_doc_number(text)
-
-                if ptype == 'assignment':
-                    fields = extract_assignment_fields(text)
-                elif ptype == 'schedule_a':
-                    fields = extract_schedule_a_fields(text)
-                elif ptype == 'promissory_note':
-                    fields = extract_promissory_note_fields(text)
-                else:
-                    fields = {}
-
-                pages_info.append({
-                    'page_num':   i,
-                    'page_type':  ptype,
-                    'doc_number': dnum,
-                    'fields':     fields,
-                    'text':       text,
-                })
-                progress.progress((i + 1) / total,
-                                  text=f"Page {i + 1}/{total} — {ptype}")
-        progress.empty()
+    with st.spinner("Reading and classifying pages… (scanned PDFs may take a moment for OCR)"):
+        pages_info = extract_pages_info(pdf_bytes)
 
     # ── Group ─────────────────────────────────────────────────────────────────
     with st.spinner("Grouping documents…"):

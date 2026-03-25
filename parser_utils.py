@@ -1,6 +1,8 @@
 import re
 import io
 import pdfplumber
+from pdf2image import convert_from_bytes
+import pytesseract
 
 
 # ── Page classification ──────────────────────────────────────────────────────
@@ -172,29 +174,46 @@ def extract_promissory_note_fields(text: str) -> dict:
 
 # ── Main entry point ─────────────────────────────────────────────────────────
 
+def _ocr_pdf_pages(pdf_bytes: bytes) -> list[str]:
+    """Convert every page to an image and run Tesseract OCR on each."""
+    images = convert_from_bytes(pdf_bytes, dpi=300)
+    return [pytesseract.image_to_string(img) for img in images]
+
+
 def extract_pages_info(pdf_bytes: bytes) -> list[dict]:
     """Return a list of page-info dicts for every page in the PDF."""
     pages = []
+    ocr_texts: list[str] | None = None
+
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for i, page in enumerate(pdf.pages):
-            text = page.extract_text() or ''
-            ptype = classify_page(text)
-            doc_num = extract_doc_number(text)
+        raw_texts = [page.extract_text() or '' for page in pdf.pages]
 
-            if ptype == 'assignment':
-                fields = extract_assignment_fields(text)
-            elif ptype == 'schedule_a':
-                fields = extract_schedule_a_fields(text)
-            elif ptype == 'promissory_note':
-                fields = extract_promissory_note_fields(text)
-            else:
-                fields = {}
+    # If pdfplumber got nothing on the first page, assume scanned — run OCR
+    if not any(t.strip() for t in raw_texts[:3]):
+        ocr_texts = _ocr_pdf_pages(pdf_bytes)
 
-            pages.append({
-                'page_num': i,
-                'page_type': ptype,
-                'doc_number': doc_num,
-                'fields': fields,
-                'text': text,
-            })
+    for i, embedded_text in enumerate(raw_texts):
+        text = embedded_text if embedded_text.strip() else (
+            ocr_texts[i] if ocr_texts and i < len(ocr_texts) else ''
+        )
+
+        ptype = classify_page(text)
+        doc_num = extract_doc_number(text)
+
+        if ptype == 'assignment':
+            fields = extract_assignment_fields(text)
+        elif ptype == 'schedule_a':
+            fields = extract_schedule_a_fields(text)
+        elif ptype == 'promissory_note':
+            fields = extract_promissory_note_fields(text)
+        else:
+            fields = {}
+
+        pages.append({
+            'page_num': i,
+            'page_type': ptype,
+            'doc_number': doc_num,
+            'fields': fields,
+            'text': text,
+        })
     return pages
