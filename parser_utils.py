@@ -174,28 +174,28 @@ def extract_promissory_note_fields(text: str) -> dict:
 
 # ── Main entry point ─────────────────────────────────────────────────────────
 
-def _ocr_pdf_pages(pdf_bytes: bytes) -> list[str]:
-    """Convert every page to an image and run Tesseract OCR on each."""
-    images = convert_from_bytes(pdf_bytes, dpi=300)
-    return [pytesseract.image_to_string(img) for img in images]
+def _ocr_page(pdf_bytes: bytes, page_num: int) -> str:
+    """OCR a single page (1-indexed) to avoid loading all pages into memory at once."""
+    images = convert_from_bytes(pdf_bytes, dpi=150, first_page=page_num + 1, last_page=page_num + 1)
+    return pytesseract.image_to_string(images[0]) if images else ''
 
 
 def extract_pages_info(pdf_bytes: bytes) -> list[dict]:
     """Return a list of page-info dicts for every page in the PDF."""
     pages = []
-    ocr_texts: list[str] | None = None
 
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         raw_texts = [page.extract_text() or '' for page in pdf.pages]
 
-    # If pdfplumber got nothing on the first page, assume scanned — run OCR
-    if not any(t.strip() for t in raw_texts[:3]):
-        ocr_texts = _ocr_pdf_pages(pdf_bytes)
+    use_ocr = not any(t.strip() for t in raw_texts[:3])
 
     for i, embedded_text in enumerate(raw_texts):
-        text = embedded_text if embedded_text.strip() else (
-            ocr_texts[i] if ocr_texts and i < len(ocr_texts) else ''
-        )
+        if embedded_text.strip():
+            text = embedded_text
+        elif use_ocr:
+            text = _ocr_page(pdf_bytes, i)
+        else:
+            text = ''
 
         ptype = classify_page(text)
         doc_num = extract_doc_number(text)
